@@ -5,7 +5,9 @@ unsigned float voltage =0;
 unsigned float temp = 0;
 unsigned float R=0;
 unsigned int x= (3.3/4096);
-unsigned float DTemp = 27;
+unsigned int DTemp = 27;
+unsigned int RTemp = 0;
+unsigned int TempDifference = 0;
 
 
 void CUART(){
@@ -37,6 +39,19 @@ void CADC(){
 }
 void resetPWM(){
     
+    TempDifference = Rtemp - Dtemp;
+    if(TempDifference >= 0)
+    {
+        
+      TA0CCR1 = TempDifference * 8;
+       
+       
+    }
+    else{
+        
+      TA0CCR1 = 0;
+    
+    }
 }
 int main(void)
 {
@@ -56,7 +71,9 @@ int main(void)
              temp= -0.0076 * R + 78.917;
          else // if(TA0CCR0>70 && TA0CCR0<100)//checks if resistance is between 70 degrees and 100degrees
              temp= -0.0275 * R+ 116.24;
-
+       
+       Rtemp = (int)temp;
+       UCA0TXBUF = Rtemp;
        resetPWM();
        
     ADC12CTL0 |= ADC12SC;                   // Start sampling/conversion
