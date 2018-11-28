@@ -1,120 +1,94 @@
-/* --COPYRIGHT--,BSD_EX
- * Copyright (c) 2012, Texas Instruments Incorporated
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * *  Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * *  Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * *  Neither the name of Texas Instruments Incorporated nor the names of
- *    its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *******************************************************************************
- *
- *                       MSP430 CODE EXAMPLE DISCLAIMER
- *
- * MSP430 code examples are self-contained low-level programs that typically
- * demonstrate a single peripheral function or device feature in a highly
- * concise manner. For this the code may rely on the device's power-on default
- * register values and settings such as the clock configuration and care must
- * be taken when combining code from several examples to avoid potential side
- * effects. Also see www.ti.com/grace for a GUI- and www.ti.com/msp430ware
- * for an API functional library-approach to peripheral configuration.
- *
- * --/COPYRIGHT--*/
-//******************************************************************************
-//   MSP430F552x Demo - ADC12, Sample A0, Set P1.0 if A0 > 0.5*AVcc
-//
-//   Description: A single sample is made on A0 with reference to AVcc.
-//   Software sets ADC12SC to start sample and conversion - ADC12SC
-//   automatically cleared at EOC. ADC12 internal oscillator times sample (16x)
-//   and conversion. In Mainloop MSP430 waits in LPM0 to save power until ADC12
-//   conversion complete, ADC12_ISR will force exit from LPM0 in Mainloop on
-//   reti. If A0 > 0.5*AVcc, P1.0 set, else reset.
-//
-//                MSP430F552x
-//             -----------------
-//         /|\|                 |
-//          | |                 |
-//          --|RST              |
-//            |                 |
-//     Vin -->|P6.0/CB0/A0  P1.0|--> LED
-//
-//   Bhargavi Nisarga
-//   Texas Instruments Inc.
-//   April 2009
-//   Built with CCSv4 and IAR Embedded Workbench Version: 4.21
-//******************************************************************************
-
 #include <msp430.h>
 #include <math.h>
 
-float voltage =0;
+
 float temp = 0;
 float R=0;
-int x= (3.3/4096);
+int inttemp =0;
+//int DTemp = 27;
+//int RTemp = 25;
+//unsigned int TempDifference;
 
 
+int CUART(void){
 
-void cfgUART(void){
-    P3SEL |=BIT3+BIT4;
-    UCA0CTL1 |= UCSWRST;
-    UCA0CTL1 |=UCSSEL_1;
-    UCA0BR0=0x03;
-    UCA0BR1=0x00;
-    UCA0MCTL |= UCBRS_3 +UCBRF_0;
-    UCA0CTL1 &= ~UCSWRST;
-    UCA0IE |=UCRXIE;
+    P4SEL |= BIT4+BIT5;
+    UCA1CTL1 |= UCSWRST;
+    UCA1CTL1 |=UCSSEL_2;
+    UCA1BR0= 6;
+    UCA1BR1= 0;
+    UCA1MCTL |= UCBRS_0 +UCBRF_13 + UCOS16;
+    UCA1CTL1 &= ~UCSWRST;
+    UCA1IE |=UCRXIE;
+
 }
-
+//int CHPWM(void){
+//    TA0CTL = TASSEL_2 + MC_1 + ID_1 + TAIE;
+//    TA0CCR0 = 255;
+//
+//    TA0CTL |= OUTMOD_7;
+//    TA0CCR1 = 0;
+//
+//}
+int CADC(void){
+    ADC12CTL0 = ADC12SHT02 + ADC12ON;         // Sampling time, ADC12 on
+     ADC12CTL1 = ADC12SHP;                     // Use sampling timer
+     ADC12IE = 0x01;                           // Enable interrupt
+     ADC12CTL0 |= ADC12ENC;
+     P6SEL |= 0x01;                            // P6.0 ADC option select
+     P1DIR |= 0x01;                            // P1.0 output
+}
+//int resetPWM(void){
+//
+//    TempDifference = Rtemp - Dtemp;
+//    if(TempDifference >= 0)
+//    {
+//
+//      TA0CCR1 = TempDifference * 8;
+//
+//
+//    }
+//    else{
+//
+//      TA0CCR1 = 0;
+//
+//    }
+//}
 int main(void)
 {
   WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
-  ADC12CTL0 = ADC12SHT02 + ADC12ON;         // Sampling time, ADC12 on
-  ADC12CTL1 = ADC12SHP;                     // Use sampling timer
-  ADC12IE = 0x01;                           // Enable interrupt
-  ADC12CTL0 |= ADC12ENC;
-  P6SEL |= 0x01;                            // P6.0 ADC option select
-  P1DIR |= 0x01;                            // P1.0 output
-  cfguart();
+  CADC();
+  CUART();
+//  CHPWM();
+
   while (1)
   {
+    ADC12CTL0 |= ADC12SC;                   // Start sampling/conversion
 
-     R = (((ADC12MEM0* x *10000)/(3.3 - ADC12MEM0*x)));
-       if (TA0CCR0>15698 && TA0CCR0<5933)//checks if resistance is between 15 degrees and 35degrees
+    __bis_SR_register(LPM0_bits + GIE);     // LPM0, ADC12_ISR will force exit
+
+     R = (ADC12MEM0*(3.3/4096)*10000)/(3.3 - (ADC12MEM0*(3.3/4096)));
+       if (R<=15698 && R>=5933)//checks if resistance is between 15 degrees and 35degrees
            temp= -0.0022 * R + 47.71;
-         else if(TA0CCR0>5933 && TA0CCR0<1919)//checks if resistance is between 40 degrees and 65degrees
+         else if(R<=5933 && R>=1919)//checks if resistance is between 40 degrees and 65degrees
              temp= -0.0076 * R + 78.917;
          else // if(TA0CCR0>70 && TA0CCR0<100)//checks if resistance is between 70 degrees and 100degrees
              temp= -0.0275 * R+ 116.24;
 
-    ADC12CTL0 |= ADC12SC;                   // Start sampling/conversion
+       inttemp = (int) temp;
+//       UCA0TXBUF = Rtemp;
+//       initializeresetPWM();
 
-    __bis_SR_register(LPM0_bits + GIE);     // LPM0, ADC12_ISR will force exit
-    __no_operation();                       // For debugger
+
+
   }
 }
 
+//#pragma vector=USCIAB0RX_VECTOR
+//__interrupt void USCI0RX_ISR(void){
+//
+//    DTemp = UCA0RXBUF;
+//}
 
 #pragma vector = ADC12_VECTOR
 __interrupt void ADC12_ISR(void)
@@ -123,29 +97,32 @@ __interrupt void ADC12_ISR(void)
   switch(__even_in_range(ADC12IV,34))
   {
   case  6:                                  // Vector  6:  ADC12IFG0
-  if (ADC12MEM0 >= 0x7ff)
-      P1OUT |= BIT0;
-  else
-      P1OUT &= ~BIT0;
-  return;
-
-    __bic_SR_register_on_exit(LPM0_bits);   // Exit active CPU
-//#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
-  }
-}
-#pragma vector=USCI_A0_VECTOR
-__interrupt void USCI_A0_ISR(void)
-{
-  switch(__even_in_range(UCA0IV,4))
-  {
-  case 0:
-      break;                             // Vector 0 - no interrupt
-  case 2:                                   // Vector 2 - RXIFG
-    while (!(UCA0IFG&UCTXIFG));             // USCI_A0 TX buffer ready?
-    UCA1TXBUF = temp;
-    break;
+      if (ADC12MEM0 >= 0x7ff)
+      {
+            P1OUT |= BIT0;}
+        else
+        {
+            P1OUT &= ~BIT0;}
+        __bic_SR_register_on_exit(LPM0_bits);   // Exit active CPU
   default:
       break;
-  }}
-
-
+  }
+}
+#pragma vector=USCI_A1_VECTOR
+__interrupt void USCI_A1_ISR(void)
+{
+    while (!(UCA1IFG & UCTXIFG));             // USCI_A0 TX buffer ready?
+        UCA1TXBUF = inttemp;
+        UCA1IFG &= ~BIT0;
+//  switch(__even_in_range(UCA1IV,4))
+//  {
+//  case 0:
+//      break;                             // Vector 0 - no interrupt
+//  case 2:                                   // Vector 2 - RXIFG
+//    while (!(UCA1IFG&UCTXIFG));             // USCI_A0 TX buffer ready?
+//    UCA1TXBUF = temp;
+//    break;
+//  default:
+//      break;
+//  }
+        }
