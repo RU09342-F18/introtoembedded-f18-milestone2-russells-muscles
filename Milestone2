@@ -4,10 +4,10 @@
 
 float temp = 0;
 float R=0;
-int inttemp =0;
+int inttemp;
 int DTemp;
 int TempDifference;
-
+float adc;
 
 int CUART(){
 
@@ -19,15 +19,16 @@ int CUART(){
     UCA1MCTL |= UCBRS_0 +UCBRF_13 + UCOS16;
     UCA1CTL1 &= ~UCSWRST;
     UCA1IE |=UCRXIE;
-    UCA1IE |=UCTXIE;
+   // UCA1IE |=UCTXIE;
 
 }
 int CHPWM(){
     P1DIR |= BIT2;
     P1SEL |= BIT2;
     P1OUT &= ~BIT2;
-    TA0CTL = TASSEL_2 + MC_1 + ID_1 + TAIE;
-    TA0CCR0 = 255;
+    TA0CTL = TASSEL_2 + MC_1 + ID_3 + TAIE;
+    TA0CCR0 = 1250;
+    TA0CCTL0 = CCIE;
 
     TA0CTL |= OUTMOD_7;
     TA0CCR1 = 0;
@@ -75,15 +76,16 @@ int main(void)
   CHPWM();
   CADC();
   CUART();
-//  CHPWM();
+  P4DIR |= BIT7;
+  P4OUT &= ~BIT7;
 
   while (1)
   {
-    ADC12CTL0 |= ADC12SC;                   // Start sampling/conversion
+    __bis_SR_register(LPM0_bits + GIE);                   // Start sampling/conversion
 
-    __bis_SR_register(LPM0_bits + GIE);     // LPM0, ADC12_ISR will force exit
+         // LPM0, ADC12_ISR will force exit
 
-     R = (ADC12MEM0*(3.3/4096)*10000)/(3.3 - (ADC12MEM0*(3.3/4096)));
+     R = (adc*(3.3/4096)*10000)/(3.3 - (adc*(3.3/4096)));
        if (R<=15698 && R>=5933)//checks if resistance is between 15 degrees and 35degrees
            temp= -0.0022 * R + 47.71;
          else if(R<=5933 && R>=1919)//checks if resistance is between 40 degrees and 65degrees
@@ -92,6 +94,8 @@ int main(void)
              temp= -0.0275 * R+ 116.24;
 
        inttemp = (int) temp;
+       while(!(UCA1IFG & UCTXIFG));
+       UCA1TXBUF = inttemp;
 
        resetPWM();
 
@@ -102,41 +106,31 @@ int main(void)
 __interrupt void ADC12_ISR(void)
 
 {
-  switch(__even_in_range(ADC12IV,34))
-  {
-  case  6:                                  // Vector  6:  ADC12IFG0
-      if (ADC12MEM0 >= 0x7ff)
-      {
-            P1OUT |= BIT0;}
-        else
-        {
-            P1OUT &= ~BIT0;}
-        __bic_SR_register_on_exit(LPM0_bits);   // Exit active CPU
-  default:
-      break;
-  }
+    P4OUT ^= BIT7;
+    adc = ADC12MEM0;
+
+  __bic_SR_register_on_exit(LPM0);   // Exit active CPU, SET BREAKPOINT HERE
 }
 #pragma vector=USCI_A1_VECTOR
 __interrupt void USCI_A1_ISR(void)
 {
-    if(!(UCA1IFG & UCTXIFG));             // USCI_A0 TX buffer ready?
-    {
-        UCA1TXBUF = inttemp;
-    }
-    if (!(UCA1IFG & UCRXIFG))
-    {
-        DTemp = UCA1RXBUF;
-    }
+    DTemp = UCA1RXBUF;
+
     UCA1IFG &= ~BIT0;
-//  switch(__even_in_range(UCA1IV,4))
-//  {
-//  case 0:
-//      break;                             // Vector 0 - no interrupt
-//  case 2:                                   // Vector 2 - RXIFG
-//    while (!(UCA1IFG&UCTXIFG));             // USCI_A0 TX buffer ready?
-//    UCA1TXBUF = temp;
-//    break;
-//  default:
-//      break;
-//  }
+
 }
+#pragma vector = TIMER0_A0_VECTOR                   // Detects interrupt for CCR0 on Timer1
+__interrupt void Timer_A00(void)
+{
+    ADC12CTL0 |= ADC12SC;
+
+
+
+}
+#pragma vector=USCIAB1RX_VECTOR
+__interrupt void USCI0RX_ISR(void) {
+
+        DTemp = UCA1RXBUF;
+
+}
+
