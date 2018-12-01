@@ -2,81 +2,77 @@
 #include <math.h>
 
 
-float temp = 0;
-float R=0;
-int inttemp;
-int DTemp = 20;
-int TempDifference;
-float adc;
+float temp = 0; //Initial temp for calculation
+float R=0; //Initial Resistance for calculation
+int inttemp; //Temperature changed to integer
+int DTemp = 20; //Initial Desired Temperature
+int TempDifference; //Temperature Difference Calcualted from inttemp and Desired Temperature
+float adc; //ADC Voltage Value
 
-int CUART(){
+int CUART(){ //UART Setup
 
-    P4SEL |= BIT4+BIT5;
-    UCA1CTL1 |= UCSWRST;
-    UCA1CTL1 |=UCSSEL_2;
-    UCA1BR0= 6;
-    UCA1BR1= 0;
-    UCA1MCTL |= UCBRS_0 +UCBRF_13 + UCOS16;
-    UCA1CTL1 &= ~UCSWRST;
-    UCA1IE |=UCRXIE;
-   // UCA1IE |=UCTXIE;
-
-}
-int CHPWM(){
-    P2DIR |= BIT0;
-    P2SEL |= BIT0;
-    P2OUT &= ~BIT0;
-
-    TA1CCR0 = 512;
-    TA1CCTL0 = CCIE;
-
-    TA1CCTL1 = OUTMOD_7;
-    TA1CCR1 = 0;
-    TA1CTL = TASSEL_2 + MC_1 + TACLR;
-
+    P4SEL |= BIT4+BIT5; //Configures P4.4 and P4.5 for RX and TX
+    UCA1CTL1 |= UCSWRST; // **Put state machine in reset**
+    UCA1CTL1 |=UCSSEL_2; //Sets CLK to SMCLK
+    UCA1BR0= 6; //Sets to 9600 1MHz
+    UCA1BR1= 0; //
+    UCA1MCTL |= UCBRS_0 +UCBRF_13 + UCOS16; //Modulation of UCBRSx=0, UCBRFx=13
+    UCA1CTL1 &= ~UCSWRST; // **Initialize USCI state machine**
+    UCA1IE |=UCRXIE; //Interrupt Enabled when input on RX pin
 
 }
-int CADC(){
+int CHPWM(){ //Hardware PWM Setup
+
+    P2DIR |= BIT0; //Directing P2.0
+    P2SEL |= BIT0; //PWM Output Select P2.0
+    P2OUT &= ~BIT0; //Sets P2.0 as off
+
+    TA1CCR0 = 512; //1.045 MHz
+    TA1CCTL0 = CCIE; //Enables Timer interrupt when timer resets
+
+    TA1CCTL1 = OUTMOD_7; // CCR1 reset/set
+    TA1CCR1 = 0; //Initial Duty Cycle of Fan 0%
+    TA1CTL = TASSEL_2 + MC_1 + TACLR; //Sets Timer SMCLK, UP_Mode
+
+
+}
+int CADC(){ //Analog Digital Converter Setup
+
     ADC12CTL0 = ADC12SHT02 + ADC12ON;         // Sampling time, ADC12 on
      ADC12CTL1 = ADC12SHP;                     // Use sampling timer
      ADC12IE = 0x01;                           // Enable interrupt
-     ADC12CTL0 |= ADC12ENC;
+     ADC12CTL0 |= ADC12ENC;                    //Enables Conversions
      P6SEL |= 0x01;                            // P6.0 ADC option select
      P1DIR |= 0x01;                            // P1.0 output
 }
-int resetPWM(){
+int resetPWM(){ //Sets Fan Speed dependant of difference of temperature between desired and measured temperature
 
 
-    TempDifference = inttemp - DTemp;
-    if(TempDifference > 0)
+    TempDifference = inttemp - DTemp; //Determines difference in temperature
+    if(TempDifference > 0) //If the temperture difference is greater the fan should turn on to cool down the thermistor
     {
-        if(TempDifference <= 2)
+        if(TempDifference <= 2) //Slows down fan to not overshoot desired temperature
         {
-            TA1CCR1  = 355;
+            TA1CCR1  = 355; //Sets Fan to 70% Duty Cycle
         }
         else
         {
-           TA1CCR1 = 450 + TempDifference * 5;
+           TA1CCR1 = 450 + TempDifference * 5; //Lows temperature dependent on temperature difference lowering duty cycle
 
         }
 
 
 
     }
-    else{
-
-      TA1CCR1  = 350;
-
-    }
-    if (TempDifference <= 0)
+    if (TempDifference <= 0) //Checks if Temperture is rising
     {
-        if(TempDifference > -3)
+        if(TempDifference > -3) //Cushions the rise of the temperature starting fan
         {
-        TA1CCR1 = 10;
+        TA1CCR1 = 10; //Sets Fan PWM to 2% Duty Cycle
         }
-        else
+        else //Lets Temperature Rise
         {
-            TA1CCR1 = 0;
+            TA1CCR1 = 0; //Turns Fan off setting Duty Cycle to 0%
         }
     }
 
@@ -85,26 +81,21 @@ int resetPWM(){
 int main(void)
 {
   WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
-  CHPWM();
-  CADC();
-  CUART();
-  P4DIR |= BIT7;
-  P4OUT &= ~BIT7;
+  CHPWM(); //Hardware PWM Setup
+  CADC(); //ADC Setup
+  CUART(); //UART Setup
+  P4DIR |= BIT7; //P4.7 set as ouput
+  P4OUT &= ~BIT7; //P4.7 set as off
 
   while (1)
-  {
-                       // Start sampling/conversion
-       ADC12CTL0 |= ADC12SC;
-         // LPM0, ADC12_ISR will force exit
-
-
-
-
-        __bis_SR_register(LPM0_bits + GIE);
+  {                
+       ADC12CTL0 |= ADC12SC; // Start sampling/conversion
+        
+        __bis_SR_register(LPM0_bits + GIE); //Enables Global Interrupts and Low Power Mode 0
   }
 }
 
-#pragma vector = ADC12_VECTOR
+#pragma vector = ADC12_VECTOR    //Inturrput Enables after sampling for calcualtions and Fan speed reconfiguration
 __interrupt void ADC12_ISR(void)
 
 {
@@ -114,39 +105,39 @@ __interrupt void ADC12_ISR(void)
       case  2: break;                           // Vector  2:  ADC overflow
       case  4: break;                           // Vector  4:  ADC timing overflow
       case  6:                                  // Vector  6:  ADC12IFG0
-    P4OUT ^= BIT7;
+    P4OUT ^= BIT7; //P4.7 toggles used for debugging
     adc = ADC12MEM0;
     R = (adc*(3.3/4096)*10000)/(3.3 - (adc*(3.3/4096)));
-           if (R<=15698 && R>=5933)//checks if resistance is between 15 degrees and 35degrees
+           if (R<=15698 && R>=5933)//checks if resistance is between 15 degrees and 35 degrees
                temp= -0.0022 * R + 47.71;
-             else if(R<=5933 && R>=1919)//checks if resistance is between 40 degrees and 65degrees
+             else if(R<=5933 && R>=1919)//checks if resistance is between 40 degrees and 65 degrees
                  temp= -0.0076 * R + 78.917;
-             else // if(TA0CCR0>70 && TA0CCR0<100)//checks if resistance is between 70 degrees and 100degrees
+             else // if(TA0CCR0>70 && TA0CCR0<100)//checks if resistance is between 70 degrees and 100 degrees
                  temp= -0.0275 * R+ 116.24;
 
-           temp = temp + 0.5;
+           temp = temp + 0.5; //Makes reading more accurate when float value 
 
-           inttemp = (int) temp;
+           inttemp = (int) temp; //Converts temp to integer
 
      // Exit active CPU, SET BREAKPOINT HERE
-    resetPWM();
+    resetPWM(); //Sets PWM after new temperature reading
     break;
       }
 }
-#pragma vector=USCI_A1_VECTOR
+#pragma vector=USCI_A1_VECTOR    //Interrupt Enables when Input of new Desired Temperature
 __interrupt void USCI_A1_ISR(void)
 {
-    DTemp = UCA1RXBUF;
+    DTemp = UCA1RXBUF; //Sets new desired temperature
 
-    UCA1IFG &= ~BIT0;
+    UCA1IFG &= ~BIT0; //Clears inturrupt flags
 
 }
 #pragma vector = TIMER1_A0_VECTOR                   // Detects interrupt for CCR0 on Timer1
 __interrupt void Timer_A00(void)
 {
-    ADC12CTL0 |= ADC12SC;
-       while(!(UCA1IFG & UCTXIFG));
-       UCA1TXBUF = inttemp;
+    ADC12CTL0 |= ADC12SC; //Samples ADC Voltage of volatage divider
+       while(!(UCA1IFG & UCTXIFG)); //Makes sure text is ready for another entry
+       UCA1TXBUF = inttemp; //Sends temperature in Celcius to Computer
 
 
 }
