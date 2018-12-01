@@ -23,15 +23,17 @@ int CUART(){
 
 }
 int CHPWM(){
-    P1DIR |= BIT2;
-    P1SEL |= BIT2;
-    P1OUT &= ~BIT2;
-    TA0CTL = TASSEL_2 + MC_1 + ID_3 + TAIE;
-    TA0CCR0 = 600;
-    TA0CCTL0 = CCIE;
+    P2DIR |= BIT0;
+    P2SEL |= BIT0;
+    P2OUT &= ~BIT0;
 
-    TA0CTL |= OUTMOD_7;
-    TA0CCR1 = 0;
+    TA1CCR0 = 512;
+    TA1CCTL0 = CCIE;
+
+    TA1CCTL1 = OUTMOD_7;
+    TA1CCR1 = 0;
+    TA1CTL = TASSEL_2 + MC_1 + TACLR;
+
 
 }
 int CADC(){
@@ -44,19 +46,18 @@ int CADC(){
 }
 int resetPWM(){
 
-    int Speed;
 
     TempDifference = inttemp - DTemp;
     if(TempDifference > 0)
     {
         if(TempDifference <= 2)
         {
-            Speed = 0;
+            TA1CCR1  = 355;
         }
         else
         {
-           // Speed = 20 + (TempDifference) * 5;
-            Speed = 400;
+           TA1CCR1 = 450 + TempDifference * 5;
+
         }
 
 
@@ -64,10 +65,20 @@ int resetPWM(){
     }
     else{
 
-      Speed = 0;
+      TA1CCR1  = 350;
 
     }
-    TA0CCR1 = Speed;
+    if (TempDifference <= 0)
+    {
+        if(TempDifference > -3)
+        {
+        TA1CCR1 = 10;
+        }
+        else
+        {
+            TA1CCR1 = 0;
+        }
+    }
 
 
 }
@@ -97,9 +108,30 @@ int main(void)
 __interrupt void ADC12_ISR(void)
 
 {
+    switch(__even_in_range(ADC12IV,34))
+      {
+      case  0: break;                           // Vector  0:  No interrupt
+      case  2: break;                           // Vector  2:  ADC overflow
+      case  4: break;                           // Vector  4:  ADC timing overflow
+      case  6:                                  // Vector  6:  ADC12IFG0
     P4OUT ^= BIT7;
     adc = ADC12MEM0;
+    R = (adc*(3.3/4096)*10000)/(3.3 - (adc*(3.3/4096)));
+           if (R<=15698 && R>=5933)//checks if resistance is between 15 degrees and 35degrees
+               temp= -0.0022 * R + 47.71;
+             else if(R<=5933 && R>=1919)//checks if resistance is between 40 degrees and 65degrees
+                 temp= -0.0076 * R + 78.917;
+             else // if(TA0CCR0>70 && TA0CCR0<100)//checks if resistance is between 70 degrees and 100degrees
+                 temp= -0.0275 * R+ 116.24;
+
+           temp = temp + 0.5;
+
+           inttemp = (int) temp;
+
      // Exit active CPU, SET BREAKPOINT HERE
+    resetPWM();
+    break;
+      }
 }
 #pragma vector=USCI_A1_VECTOR
 __interrupt void USCI_A1_ISR(void)
@@ -109,21 +141,13 @@ __interrupt void USCI_A1_ISR(void)
     UCA1IFG &= ~BIT0;
 
 }
-#pragma vector = TIMER0_A0_VECTOR                   // Detects interrupt for CCR0 on Timer1
+#pragma vector = TIMER1_A0_VECTOR                   // Detects interrupt for CCR0 on Timer1
 __interrupt void Timer_A00(void)
 {
     ADC12CTL0 |= ADC12SC;
-    R = (adc*(3.3/4096)*10000)/(3.3 - (adc*(3.3/4096)));
-       if (R<=15698 && R>=5933)//checks if resistance is between 15 degrees and 35degrees
-           temp= -0.0022 * R + 47.71;
-         else if(R<=5933 && R>=1919)//checks if resistance is between 40 degrees and 65degrees
-             temp= -0.0076 * R + 78.917;
-         else // if(TA0CCR0>70 && TA0CCR0<100)//checks if resistance is between 70 degrees and 100degrees
-             temp= -0.0275 * R+ 116.24;
-
-       inttemp = (int) temp;
        while(!(UCA1IFG & UCTXIFG));
        UCA1TXBUF = inttemp;
-       resetPWM();
+
 
 }
+
