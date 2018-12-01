@@ -55,7 +55,7 @@ int resetPWM(){ //Sets Fan Speed dependant of difference of temperature between 
         {
             TA1CCR1  = 355; //Sets Fan to 70% Duty Cycle
         }
-        else
+        else //Higher temperature difference lower temperature quickly
         {
            TA1CCR1 = 450 + TempDifference * 5; //Lows temperature dependent on temperature difference lowering duty cycle
 
