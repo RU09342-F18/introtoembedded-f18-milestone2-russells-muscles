@@ -8,9 +8,9 @@ The code works with different circuits measuring the temperature of the room and
 ## Inputs and Outputs of Microcontroller
 
 ### MSP430F5529
- INPUTS: P4.5-PM_UCA1RXD
- OUTPUTS: P4.7-Green LED, P4.4-PM_UCA1TXD, P2.0-Timer1 Hardware PWM
- Timer: TimerA1
+ INPUTS: P4.5-PM_UCA1RXD  
+ OUTPUTS: P4.7-Green LED, P4.4-PM_UCA1TXD, P2.0-Timer1 Hardware PWM  
+ Timer: TimerA1  
 
 ## Authors
 
